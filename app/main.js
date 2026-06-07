@@ -1,8 +1,10 @@
 (function () {
   const STORAGE_KEY = "record-agent-state-v1";
+  const APP_STATE_VERSION = 2;
   const state = loadState();
   let activeView = "timeline";
   let searchQuery = "";
+  let music = null;
 
   const dom = {
     tripList: document.getElementById("tripList"),
@@ -22,7 +24,8 @@
     tripTitleInput: document.getElementById("tripTitleInput"),
     tripLocationInput: document.getElementById("tripLocationInput"),
     tripStartInput: document.getElementById("tripStartInput"),
-    tripEndInput: document.getElementById("tripEndInput")
+    tripEndInput: document.getElementById("tripEndInput"),
+    musicToggleButton: document.getElementById("musicToggleButton")
   };
 
   bindEvents();
@@ -37,12 +40,13 @@
       dom.recordPanel.scrollIntoView({ behavior: "smooth", block: "start" });
       document.getElementById("memoryTitleInput").focus();
     });
+    dom.musicToggleButton.addEventListener("click", toggleMusic);
 
     dom.tripList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-trip-id]");
       if (!button) return;
       state.activeTripId = button.dataset.tripId;
-      state.selectedMemoryId = getTripMemories(state.activeTripId)[0]?.id || null;
+      state.selectedMemoryId = null;
       saveState();
       render();
     });
@@ -252,9 +256,6 @@
     if (!state.activeTripId && state.trips[0]) {
       state.activeTripId = state.trips[0].id;
     }
-    if (!state.selectedMemoryId) {
-      state.selectedMemoryId = getTripMemories(state.activeTripId)[0]?.id || null;
-    }
     renderTrips();
     renderHeader();
     renderAgentStrip();
@@ -303,7 +304,7 @@
         <div class="agent-grid">
           <div class="agent-card"><strong>观察</strong><p class="meta">添加照片后，我会提取地点、主题和可能的标签。</p></div>
           <div class="agent-card"><strong>追问</strong><p class="meta">用短问题帮你补上“为什么重要”。</p></div>
-          <div class="agent-card"><strong>整理</strong><p class="meta">生成可编辑摘要，并接入 2.5D 记忆对象。</p></div>
+          <div class="agent-card"><strong>整理</strong><p class="meta">生成可编辑摘要，并接入 3D 记忆对象。</p></div>
         </div>
       `;
       return;
@@ -354,9 +355,9 @@
     const object = getObject3D(memory.object3DIds[0]);
     const badge = object
       ? object.status === "succeeded"
-        ? '<span class="badge is-ready">2.5D 已生成</span>'
-        : '<span class="badge is-processing">生成中</span>'
-      : '<span class="badge">可生成 2.5D</span>';
+        ? '<span class="badge is-ready">3D 已生成</span>'
+        : '<span class="badge is-processing">3D 建模中</span>'
+      : '<span class="badge">可生成 3D</span>';
     return `
       <article class="memory-card" data-memory-id="${memory.id}">
         <button type="button">
@@ -406,7 +407,7 @@
       dom.viewContent.innerHTML = `
         <div class="empty-state">
           <h3>还没有 3D 记忆对象</h3>
-          <p>在右侧详情里点击“生成 2.5D”，就能把照片变成可拖动的空间记忆卡。</p>
+          <p>选择一条记忆后点击“生成 3D”，就能把照片变成可拖动的空间记忆卡。</p>
         </div>
       `;
       return;
@@ -423,7 +424,7 @@
               <div class="object-body">
                 <div class="status-row">
                   <span class="badge ${object.status === "succeeded" ? "is-ready" : "is-processing"}">${object.status === "succeeded" ? "可查看" : "生成中"}</span>
-                  <span class="badge">L1 单图 2.5D</span>
+                  <span class="badge">单图 3D 记忆</span>
                 </div>
                 <h3>${escapeHtml(memory.title)}</h3>
                 <div class="progress-bar" aria-label="生成进度"><span style="--value: ${progress}%"></span></div>
@@ -472,7 +473,7 @@
         <div class="inspector-empty">
           <p class="eyebrow">详情</p>
           <h3>${escapeHtml(trip?.title || "还没有旅行")}</h3>
-          <p class="meta">选择一条记忆后，可以在这里编辑说明、生成 2.5D、添加标注和导出卡片。</p>
+          <p class="meta">选择一条记忆后，这里才会展开详情。这样手机上不会重复显示同一条内容。</p>
         </div>
       `;
       return;
@@ -491,7 +492,7 @@
         </div>
 
         <div class="detail-actions">
-          <button class="primary-action" type="button" data-action="generate-3d">${hasReadyObject ? "重新生成" : object ? "查看进度" : "生成 2.5D"}</button>
+          <button class="primary-action" type="button" data-action="generate-3d">${hasReadyObject ? "重新生成 3D" : object ? "查看 3D" : "生成 3D"}</button>
           <button class="ghost-button" type="button" data-action="export-card">导出卡片</button>
         </div>
 
@@ -533,16 +534,16 @@
       return `
         <div class="detail-section">
           <strong>3D 状态</strong>
-          <p class="meta">这张照片还没有生成 2.5D。原型会创建一个可拖动的深度视差对象，后续可替换成真实 3D 重建结果。</p>
+          <p class="meta">这张照片还没有生成 3D 记忆对象。当前版本会直接生成一个可拖动的本地 3D 预览，后续可替换成真实云端 3D 重建结果。</p>
         </div>
       `;
     }
 
     if (object.status !== "succeeded") {
       return `
-        <div class="detail-section">
-          <strong>生成中</strong>
-          <div class="progress-bar"><span style="--value: ${object.progress}%"></span></div>
+      <div class="detail-section">
+        <strong>生成中</strong>
+        <div class="progress-bar"><span style="--value: ${object.progress}%"></span></div>
           <p class="meta">${escapeHtml(object.qualityReport)}</p>
         </div>
       `;
@@ -551,7 +552,7 @@
     const media = getMedia(memory.mediaIds[0]);
     return `
       <div class="detail-section">
-        <strong>2.5D 记忆对象</strong>
+        <strong>3D 记忆对象</strong>
         <div class="depth-stage" data-depth-stage>
           <div class="depth-stack" style="--depth-image: url('${media.dataUrl}')">
             <div class="depth-layer back"></div>
@@ -564,14 +565,14 @@
             `).join("")}
           </div>
         </div>
-        <p class="hint">拖动预览区可以旋转。当前是 L1 单图 2.5D，用来验证产品闭环。</p>
+        <p class="hint">拖动预览区可以旋转。当前是本地单图 3D 预览，后续可以接入真实建模服务。</p>
       </div>
     `;
   }
 
   function renderAnnotationList(memory) {
     if (!memory.annotations.length) {
-      return '<p class="meta">还没有标注。生成 2.5D 后可以把说明点贴到对象上。</p>';
+      return '<p class="meta">还没有标注。生成 3D 后可以把说明点贴到对象上。</p>';
     }
     return `
       <ul class="annotation-list">
@@ -589,13 +590,13 @@
         id: createId("object3d"),
         memoryId,
         sourceMediaIds: memory.mediaIds.slice(),
-        generationLevel: "L1",
-        status: "processing",
-        progress: 12,
+        generationLevel: "single-image-3d-preview",
+        status: "succeeded",
+        progress: 100,
         assetUrl: "",
         previewUrl: getMedia(memory.mediaIds[0]).dataUrl,
-        qualityScore: 0.78,
-        qualityReport: "素材清晰，主体可见。适合生成快速 2.5D 记忆对象。",
+        qualityScore: 0.82,
+        qualityReport: "已生成本地单图 3D 记忆预览。后续可替换为真实 3D 建模管线。",
         failureReason: "",
         annotations: [],
         createdAt: new Date().toISOString()
@@ -603,26 +604,100 @@
       state.objects3D.unshift(object);
       memory.object3DIds = [object.id];
     } else {
-      object.status = "processing";
-      object.progress = 18;
-      object.qualityReport = "正在重新估计深度层次，并准备交互预览。";
+      object.status = "succeeded";
+      object.progress = 100;
+      object.qualityReport = "已重新生成本地单图 3D 记忆预览。";
     }
 
+    object.assetUrl = `local://${object.id}`;
     saveState();
     render();
+  }
 
-    const steps = [36, 58, 82, 100];
-    for (const progress of steps) {
-      await delay(260);
-      object.progress = progress;
-      if (progress === 100) {
-        object.status = "succeeded";
-        object.assetUrl = `local://${object.id}`;
-        object.qualityReport = "已生成 L1 单图 2.5D。真实产品中这里会替换为云端或本地 3D 管线输出。";
-      }
-      saveState();
-      render();
+  async function toggleMusic() {
+    if (music?.playing) {
+      stopMusic();
+      return;
     }
+    await startMusic();
+  }
+
+  async function startMusic() {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) {
+      dom.musicToggleButton.textContent = "音乐不可用";
+      return;
+    }
+
+    if (!music) {
+      const context = new AudioContext();
+      const master = context.createGain();
+      const delayNode = context.createDelay(1.4);
+      const feedback = context.createGain();
+      const filter = context.createBiquadFilter();
+
+      master.gain.value = 0.045;
+      delayNode.delayTime.value = 0.42;
+      feedback.gain.value = 0.22;
+      filter.type = "lowpass";
+      filter.frequency.value = 1800;
+
+      master.connect(filter);
+      filter.connect(context.destination);
+      master.connect(delayNode);
+      delayNode.connect(feedback);
+      feedback.connect(delayNode);
+      delayNode.connect(filter);
+
+      music = {
+        context,
+        master,
+        playing: false,
+        timers: [],
+        step: 0,
+        notes: [293.66, 349.23, 392.0, 440.0, 523.25, 587.33, 659.25, 783.99]
+      };
+    }
+
+    await music.context.resume();
+    music.playing = true;
+    dom.musicToggleButton.textContent = "关闭音乐";
+    dom.musicToggleButton.setAttribute("aria-pressed", "true");
+    scheduleAmbientNote();
+  }
+
+  function scheduleAmbientNote() {
+    if (!music?.playing) return;
+    const now = music.context.currentTime;
+    const note = music.notes[music.step % music.notes.length];
+    const harmony = music.notes[(music.step + 3) % music.notes.length] / 2;
+    playTone(note, now, 2.6, 0.032);
+    playTone(harmony, now + 0.04, 3.1, 0.024);
+    music.step += music.step % 4 === 3 ? 2 : 1;
+    music.timers.push(window.setTimeout(scheduleAmbientNote, 1450));
+  }
+
+  function playTone(frequency, startAt, duration, volume) {
+    const oscillator = music.context.createOscillator();
+    const gain = music.context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, startAt);
+    gain.gain.setValueAtTime(0, startAt);
+    gain.gain.linearRampToValueAtTime(volume, startAt + 0.18);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+    oscillator.connect(gain);
+    gain.connect(music.master);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + duration + 0.1);
+  }
+
+  function stopMusic() {
+    if (!music) return;
+    music.playing = false;
+    music.timers.forEach((timer) => window.clearTimeout(timer));
+    music.timers = [];
+    dom.musicToggleButton.textContent = "开启音乐";
+    dom.musicToggleButton.setAttribute("aria-pressed", "false");
   }
 
   function saveMemoryDetail(memoryId) {
@@ -779,7 +854,14 @@
   function loadState() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.uiVersion !== APP_STATE_VERSION) {
+          parsed.selectedMemoryId = null;
+          parsed.uiVersion = APP_STATE_VERSION;
+        }
+        return parsed;
+      }
     } catch (error) {
       console.warn("Unable to load local state", error);
     }
@@ -797,7 +879,8 @@
     const image = createSampleImage("雨后的街角");
     return {
       activeTripId: tripId,
-      selectedMemoryId: memoryId,
+      selectedMemoryId: null,
+      uiVersion: APP_STATE_VERSION,
       trips: [
         {
           id: tripId,
