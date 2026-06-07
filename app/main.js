@@ -1,20 +1,21 @@
 (function () {
   const STORAGE_KEY = "record-agent-state-v1";
-  const APP_RESOURCE_VERSION = "v8";
-  const APP_STATE_VERSION = 2;
+  const APP_RESOURCE_VERSION = "v9";
+  const APP_STATE_VERSION = 3;
   const state = loadState();
   let activeView = "timeline";
   let searchQuery = "";
   let music = null;
+  let musicStartPending = false;
 
   const dom = {
+    appShell: document.querySelector(".app-shell"),
     tripList: document.getElementById("tripList"),
     tripCount: document.getElementById("tripCount"),
     activeTripTitle: document.getElementById("activeTripTitle"),
     activeTripMeta: document.getElementById("activeTripMeta"),
     memoryForm: document.getElementById("memoryForm"),
     memoryPhotoInput: document.getElementById("memoryPhotoInput"),
-    quickPhotoInput: document.getElementById("quickPhotoInput"),
     agentStrip: document.getElementById("agentStrip"),
     viewContent: document.getElementById("viewContent"),
     inspector: document.getElementById("inspector"),
@@ -26,9 +27,13 @@
     tripLocationInput: document.getElementById("tripLocationInput"),
     tripStartInput: document.getElementById("tripStartInput"),
     tripEndInput: document.getElementById("tripEndInput"),
-    musicToggleButton: document.getElementById("musicToggleButton"),
+    tripMemoryPhotoInput: document.getElementById("tripMemoryPhotoInput"),
+    tripMemoryTitleInput: document.getElementById("tripMemoryTitleInput"),
+    tripMemoryLocationInput: document.getElementById("tripMemoryLocationInput"),
+    tripMemoryNoteInput: document.getElementById("tripMemoryNoteInput"),
+    tripMemoryMoodInput: document.getElementById("tripMemoryMoodInput"),
+    tripMemoryTagsInput: document.getElementById("tripMemoryTagsInput"),
     musicStatus: document.getElementById("musicStatus"),
-    refreshAppButton: document.getElementById("refreshAppButton"),
     appVersion: document.getElementById("appVersion")
   };
 
@@ -39,32 +44,30 @@
 
   bindEvents();
   render();
+  setupAmbientMusic();
   registerServiceWorker();
 
   function bindEvents() {
-    document.getElementById("newTripButton").addEventListener("click", openTripDialog);
+    document.getElementById("newTripButton").addEventListener("click", () => {
+      requestAmbientMusic();
+      openTripDialog();
+    });
     document.getElementById("closeTripDialog").addEventListener("click", closeTripDialog);
     document.getElementById("cancelTripButton").addEventListener("click", closeTripDialog);
-    document.getElementById("focusRecordButton").addEventListener("click", () => {
-      dom.recordPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-      document.getElementById("memoryTitleInput").focus();
-    });
-    dom.musicToggleButton.addEventListener("click", toggleMusic);
-    if (dom.refreshAppButton) {
-      dom.refreshAppButton.addEventListener("click", refreshApp);
-    }
 
     dom.tripList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-trip-id]");
       if (!button) return;
+      requestAmbientMusic();
       state.activeTripId = button.dataset.tripId;
       state.selectedMemoryId = null;
       saveState();
       render();
     });
 
-    dom.tripForm.addEventListener("submit", (event) => {
+    dom.tripForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      requestAmbientMusic();
       const title = dom.tripTitleInput.value.trim();
       if (!title) return;
       const trip = {
@@ -78,9 +81,62 @@
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
+
+      const memoryFile = dom.tripMemoryPhotoInput.files[0];
+      const memoryTitle = dom.tripMemoryTitleInput.value.trim();
+      const memoryNote = dom.tripMemoryNoteInput.value.trim();
+      const memoryLocation = dom.tripMemoryLocationInput.value.trim() || trip.locations[0] || "旅途中";
+      const memoryTags = dom.tripMemoryTagsInput.value.trim();
+      const shouldCreateMemory = Boolean(memoryFile || memoryTitle || memoryNote || memoryTags);
+
       state.trips.unshift(trip);
       state.activeTripId = trip.id;
       state.selectedMemoryId = null;
+
+      if (shouldCreateMemory) {
+        const media = memoryFile
+          ? {
+              id: createId("media"),
+              type: "image",
+              source: "user",
+              dataUrl: await resizeImage(memoryFile),
+              createdAt: new Date().toISOString()
+            }
+          : null;
+        const agent = buildAgentDraft({
+          title: memoryTitle,
+          note: memoryNote,
+          locationName: memoryLocation,
+          tags: memoryTags
+        });
+        const memory = {
+          id: createId("memory"),
+          tripId: trip.id,
+          title: memoryTitle || agent.title,
+          rawNote: memoryNote || "这是一条稍后补全的旅行记忆。",
+          agentSummary: agent.summary,
+          agentQuestions: agent.questions,
+          occurredAt: new Date().toISOString(),
+          location: createLocation(memoryLocation),
+          mediaIds: media ? [media.id] : [],
+          object3DIds: [],
+          tags: uniqueTags([...parseTags(memoryTags), ...agent.tags]),
+          mood: dom.tripMemoryMoodInput.value,
+          privacyLevel: "private",
+          annotations: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        if (media) {
+          state.media.unshift(media);
+          trip.coverMediaId = media.id;
+        }
+        state.memories.unshift(memory);
+        state.selectedMemoryId = memory.id;
+      }
+
+      activeView = "timeline";
+      updateActiveTab();
       saveState();
       closeTripDialog();
       render();
@@ -91,19 +147,12 @@
       await createMemoryFromForm(dom.memoryPhotoInput.files[0]);
     });
 
-    dom.quickPhotoInput.addEventListener("change", async () => {
-      if (!dom.quickPhotoInput.files[0]) return;
-      await createMemoryFromForm(dom.quickPhotoInput.files[0], { quick: true });
-      dom.quickPhotoInput.value = "";
-    });
-
     document.querySelector(".tabs").addEventListener("click", (event) => {
       const button = event.target.closest("[data-view]");
       if (!button) return;
+      requestAmbientMusic();
       activeView = button.dataset.view;
-      document.querySelectorAll(".tab").forEach((tab) => {
-        tab.classList.toggle("is-active", tab.dataset.view === activeView);
-      });
+      updateActiveTab();
       renderView();
     });
 
@@ -148,33 +197,6 @@
       if (!stage) return;
       bindDepthDrag(stage, event);
     });
-  }
-
-  async function refreshApp() {
-    if (dom.musicStatus) {
-      dom.musicStatus.textContent = "正在刷新到新版...";
-      dom.musicStatus.style.display = "block";
-    }
-
-    try {
-      if ("serviceWorker" in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map((registration) => registration.update()));
-      }
-
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(
-          keys
-            .filter((key) => key.startsWith("record-agent-pwa"))
-            .map((key) => caches.delete(key))
-        );
-      }
-    } catch (error) {
-      console.warn("Refresh cache failed, reloading anyway.", error);
-    } finally {
-      window.location.reload();
-    }
   }
 
   async function createMemoryFromForm(file, options = {}) {
@@ -331,30 +353,18 @@
   function renderAgentStrip() {
     const memory = getSelectedMemory();
     if (!memory) {
-      dom.agentStrip.innerHTML = `
-        <div class="agent-header">
-          <div>
-            <p class="eyebrow">Agent</p>
-            <strong>等待第一条记忆</strong>
-          </div>
-          <span class="badge is-private">本地原型</span>
-        </div>
-        <div class="agent-grid">
-          <div class="agent-card"><strong>观察</strong><p class="meta">添加照片后，我会提取地点、主题和可能的标签。</p></div>
-          <div class="agent-card"><strong>追问</strong><p class="meta">用短问题帮你补上“为什么重要”。</p></div>
-          <div class="agent-card"><strong>整理</strong><p class="meta">生成可编辑摘要，并接入 3D 记忆对象。</p></div>
-        </div>
-      `;
+      dom.agentStrip.hidden = true;
+      dom.agentStrip.innerHTML = "";
       return;
     }
 
+    dom.agentStrip.hidden = false;
     dom.agentStrip.innerHTML = `
       <div class="agent-header">
         <div>
           <p class="eyebrow">Agent 对 ${escapeHtml(memory.title)} 的整理</p>
           <strong>${escapeHtml(memory.agentSummary)}</strong>
         </div>
-        <span class="badge is-private">${escapeHtml(memory.privacyLevel)}</span>
       </div>
       <details class="agent-questions">
         <summary>展开 Agent 的 3 个补全问题</summary>
@@ -372,7 +382,14 @@
       objects: renderObjects,
       review: renderReview
     };
+    updateActiveTab();
     renderers[activeView]();
+  }
+
+  function updateActiveTab() {
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.classList.toggle("is-active", tab.dataset.view === activeView);
+    });
   }
 
   function renderTimeline() {
@@ -405,7 +422,6 @@
           <span class="timeline-dot" aria-hidden="true"></span>
           <span class="timeline-main">
             <span class="status-row">
-              <span class="badge is-private">私密</span>
               ${badge}
             </span>
             <strong>${escapeHtml(memory.title)}</strong>
@@ -520,17 +536,14 @@
   function renderInspector() {
     const memory = getSelectedMemory();
     if (!memory) {
-      const trip = getActiveTrip();
-      dom.inspector.innerHTML = `
-        <div class="inspector-empty">
-          <p class="eyebrow">详情</p>
-          <h3>${escapeHtml(trip?.title || "还没有旅行")}</h3>
-          <p class="meta">选择一条记忆后，这里才会展开详情。这样手机上不会重复显示同一条内容。</p>
-        </div>
-      `;
+      dom.appShell.classList.add("is-inspector-hidden");
+      dom.inspector.hidden = true;
+      dom.inspector.innerHTML = "";
       return;
     }
 
+    dom.appShell.classList.remove("is-inspector-hidden");
+    dom.inspector.hidden = false;
     const object = getObject3D(memory.object3DIds[0]);
     const hasReadyObject = object?.status === "succeeded";
     const hasPhoto = hasUserPhoto(memory);
@@ -678,24 +691,29 @@
     render();
   }
 
-  async function toggleMusic() {
-    if (music?.playing) {
-      stopMusic();
-      return;
-    }
-    try {
-      await startMusic();
-    } catch (error) {
-      dom.musicToggleButton.textContent = "音乐未开启";
-      dom.musicStatus.textContent = "浏览器阻止了音频，请再点一次或检查手机静音。";
-    }
+  function setupAmbientMusic() {
+    requestAmbientMusic();
+    ["pointerdown", "touchstart", "keydown"].forEach((eventName) => {
+      document.addEventListener(eventName, requestAmbientMusic, { once: true, passive: true });
+    });
+  }
+
+  function requestAmbientMusic() {
+    if (music?.playing || musicStartPending) return;
+    musicStartPending = true;
+    startMusic()
+      .catch(() => {
+        if (dom.musicStatus) dom.musicStatus.textContent = "音频会在下一次点击页面时启动。";
+      })
+      .finally(() => {
+        musicStartPending = false;
+      });
   }
 
   async function startMusic() {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) {
-      dom.musicToggleButton.textContent = "音乐不可用";
-      dom.musicStatus.textContent = "当前浏览器不支持 Web Audio。";
+      if (dom.musicStatus) dom.musicStatus.textContent = "当前浏览器不支持 Web Audio。";
       return;
     }
 
@@ -707,12 +725,12 @@
       const feedback = context.createGain();
       const filter = context.createBiquadFilter();
 
-      master.gain.value = 0.24;
-      padGain.gain.value = 0.075;
-      delayNode.delayTime.value = 0.42;
-      feedback.gain.value = 0.22;
+      master.gain.value = 0.2;
+      padGain.gain.value = 0.06;
+      delayNode.delayTime.value = 0.48;
+      feedback.gain.value = 0.2;
       filter.type = "lowpass";
-      filter.frequency.value = 2200;
+      filter.frequency.value = 2400;
 
       master.connect(filter);
       filter.connect(context.destination);
@@ -730,39 +748,38 @@
         playing: false,
         timers: [],
         step: 0,
-        notes: [293.66, 349.23, 392.0, 440.0, 523.25, 587.33, 659.25, 783.99]
+        notes: [392.0, 493.88, 587.33, 659.25, 783.99, 659.25, 587.33, 493.88]
       };
     }
 
     await music.context.resume();
     if (music.context.state !== "running") {
-      dom.musicStatus.textContent = "音频还未启动，请再点一次。";
+      if (dom.musicStatus) dom.musicStatus.textContent = "音频会在下一次点击页面时启动。";
       return;
     }
+    if (music.playing) return;
     music.playing = true;
     startPad();
     playStartupChime();
-    dom.musicToggleButton.textContent = "音乐播放中";
-    dom.musicStatus.textContent = "如果听不到，请确认手机没有静音并调高媒体音量。";
-    dom.musicToggleButton.setAttribute("aria-pressed", "true");
+    if (dom.musicStatus) dom.musicStatus.textContent = "背景音乐播放中。";
     scheduleAmbientNote();
   }
 
   function playStartupChime() {
     const now = music.context.currentTime;
-    playTone(523.25, now, 0.85, 0.16);
-    playTone(659.25, now + 0.1, 0.9, 0.12);
-    playTone(783.99, now + 0.2, 1.1, 0.1);
+    playTone(493.88, now, 0.9, 0.1);
+    playTone(587.33, now + 0.12, 1, 0.09);
+    playTone(783.99, now + 0.28, 1.2, 0.075);
   }
 
   function startPad() {
     if (!music || music.padOscillators.length) return;
-    [146.83, 220.0, 293.66].forEach((frequency, index) => {
+    [196.0, 293.66, 392.0].forEach((frequency, index) => {
       const oscillator = music.context.createOscillator();
       const gain = music.context.createGain();
       oscillator.type = index === 1 ? "triangle" : "sine";
       oscillator.frequency.value = frequency;
-      gain.gain.value = index === 1 ? 0.26 : 0.18;
+      gain.gain.value = index === 1 ? 0.18 : 0.12;
       oscillator.connect(gain);
       gain.connect(music.padGain);
       oscillator.start();
@@ -774,11 +791,11 @@
     if (!music?.playing) return;
     const now = music.context.currentTime;
     const note = music.notes[music.step % music.notes.length];
-    const harmony = music.notes[(music.step + 3) % music.notes.length] / 2;
-    playTone(note, now, 2.8, 0.095);
-    playTone(harmony, now + 0.04, 3.2, 0.06);
-    music.step += music.step % 4 === 3 ? 2 : 1;
-    music.timers.push(window.setTimeout(scheduleAmbientNote, 1450));
+    const harmony = music.notes[(music.step + 2) % music.notes.length] / 2;
+    playTone(note, now, 3.2, 0.07);
+    playTone(harmony, now + 0.08, 3.6, 0.04);
+    music.step += music.step % 5 === 4 ? 2 : 1;
+    music.timers.push(window.setTimeout(scheduleAmbientNote, 1750));
   }
 
   function playTone(frequency, startAt, duration, volume) {
@@ -808,9 +825,7 @@
       }
     });
     music.padOscillators = [];
-    dom.musicToggleButton.textContent = "开启音乐";
-    dom.musicStatus.textContent = "";
-    dom.musicToggleButton.setAttribute("aria-pressed", "false");
+    if (dom.musicStatus) dom.musicStatus.textContent = "";
   }
 
   function saveMemoryDetail(memoryId) {
@@ -983,6 +998,9 @@
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.uiVersion !== APP_STATE_VERSION) {
+          if (isDemoOnlyState(parsed)) {
+            return createSeedState();
+          }
           parsed.selectedMemoryId = null;
           parsed.uiVersion = APP_STATE_VERSION;
         }
@@ -998,61 +1016,23 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
+  function isDemoOnlyState(value) {
+    const tripTitle = value?.trips?.[0]?.title || "";
+    const memoryTitle = value?.memories?.[0]?.title || "";
+    return value?.trips?.length === 1
+      && value?.memories?.length === 1
+      && tripTitle.includes("京都")
+      && memoryTitle.includes("雨后");
+  }
+
   function createSeedState() {
-    const tripId = createId("trip");
-    const mediaId = createId("media");
-    const memoryId = createId("memory");
-    const image = createSampleImage("雨后的街角");
     return {
-      activeTripId: tripId,
+      activeTripId: "",
       selectedMemoryId: null,
       uiVersion: APP_STATE_VERSION,
-      trips: [
-        {
-          id: tripId,
-          title: "京都 2026 春",
-          startDate: "2026-04-05",
-          endDate: "2026-04-12",
-          locations: ["日本京都"],
-          coverMediaId: mediaId,
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-      ],
-      memories: [
-        {
-          id: memoryId,
-          tripId,
-          title: "雨后的街角小店",
-          rawNote: "下雨刚停，店门口的灯和湿掉的石板路让我觉得这一刻很安静。",
-          agentSummary: "这条记忆关于日本京都：雨后的小店、灯光和湿润的街道共同构成了一个平静的停顿。",
-          agentQuestions: [
-            "你当时为什么愿意在这里停下来？",
-            "这张照片里最想保留的是灯光、路面，还是那家店？",
-            "如果把它做成 3D 记忆对象，你想标注哪个细节？"
-          ],
-          occurredAt: new Date().toISOString(),
-          location: createLocation("京都，哲学之道附近"),
-          mediaIds: [mediaId],
-          object3DIds: [],
-          tags: ["雨天", "街角", "小店"],
-          mood: "平静",
-          privacyLevel: "private",
-          annotations: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-      ],
-      media: [
-        {
-          id: mediaId,
-          type: "image",
-          source: "user",
-          dataUrl: image,
-          createdAt: new Date().toISOString()
-        }
-      ],
+      trips: [],
+      memories: [],
+      media: [],
       objects3D: []
     };
   }

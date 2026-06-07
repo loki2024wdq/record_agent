@@ -11,7 +11,7 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" href="./assets/icon-192.png" sizes="192x192">
     <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="./styles.css?v=8">
+    <link rel="stylesheet" href="./styles.css?v=9">
   </head>
   <body>
     <div class="app-shell">
@@ -22,7 +22,7 @@
             <p class="eyebrow">Memory Agent</p>
             <h1>旅行意义记录</h1>
           </div>
-          <span class="app-version" id="appVersion">v8</span>
+          <span class="app-version" id="appVersion">v9</span>
         </div>
 
         <button class="primary-action" id="newTripButton" type="button">新建旅行</button>
@@ -34,14 +34,6 @@
           </div>
           <div class="trip-list" id="tripList"></div>
         </div>
-
-        <div class="privacy-panel">
-          <span class="status-dot"></span>
-          <div>
-            <strong>默认私密</strong>
-            <p>所有记录先保存在本机浏览器，本原型不会上传照片。</p>
-          </div>
-        </div>
       </aside>
 
       <main class="workspace">
@@ -50,39 +42,10 @@
             <p class="eyebrow" id="activeTripMeta">当前旅行</p>
             <h2 id="activeTripTitle">准备中</h2>
           </div>
-          <div class="topbar-actions">
-            <button class="ghost-button music-button" id="musicToggleButton" type="button" aria-pressed="false">开启音乐</button>
-            <span class="music-status" id="musicStatus" aria-live="polite"></span>
-            <button class="ghost-button refresh-button" id="refreshAppButton" type="button">刷新新版</button>
-            <label class="ghost-button" for="quickPhotoInput">导入照片</label>
-            <input class="visually-hidden" id="quickPhotoInput" type="file" accept="image/*" capture="environment">
-            <button class="ghost-button" id="focusRecordButton" type="button">新增记忆</button>
-          </div>
+          <span class="visually-hidden" id="musicStatus" aria-live="polite"></span>
         </header>
 
-        <section class="guide-panel" aria-label="使用说明">
-          <details class="guide-card">
-            <summary>
-              <span>怎么操作</span>
-              <small>拍照、写一句话、保存，再生成 3D 记忆</small>
-            </summary>
-            <ol class="guide-list">
-              <li>点“新建旅行”，给这次旅行起一个名字。</li>
-              <li>点“添加照片”或顶部“导入照片”，选择相机或相册。</li>
-              <li>写一句说明，保存后会出现在时间线里。</li>
-              <li>选择一条记忆，在详情里点“生成 3D”，再添加说明点。想要氛围感时，可以点“开启音乐”。</li>
-            </ol>
-          </details>
-          <details class="guide-card">
-            <summary>
-              <span>照片存在哪里</span>
-              <small>当前版本只存在这台设备的浏览器里</small>
-            </summary>
-            <p>照片会在保存前压缩成浏览器可保存的图片数据，并和说明一起写入当前浏览器的 localStorage。本原型不会把照片上传到 GitHub、云服务器或其他设备；清除浏览器数据、换浏览器或换手机后，这些本地记录可能不会保留。</p>
-          </details>
-        </section>
-
-        <section class="record-panel" id="recordPanel" aria-labelledby="recordTitle">
+        <section class="record-panel is-hidden" id="recordPanel" aria-labelledby="recordTitle">
           <div class="record-intro">
             <p class="eyebrow">今日记录</p>
             <h3 id="recordTitle">把一个有意义的瞬间存下来</h3>
@@ -185,20 +148,61 @@
             <input id="tripEndInput" type="date">
           </label>
         </div>
+        <div class="dialog-memory">
+          <div>
+            <p class="eyebrow">今日记录</p>
+            <h4>把第一段有意义的瞬间放进这次旅行</h4>
+          </div>
+          <label class="media-drop compact" for="tripMemoryPhotoInput">
+            <input id="tripMemoryPhotoInput" type="file" accept="image/*" capture="environment">
+            <span class="media-drop-icon">+</span>
+            <strong>添加照片</strong>
+            <small>相机或相册都可以，保存前会自动压缩</small>
+          </label>
+          <label>
+            <span>记忆标题</span>
+            <input id="tripMemoryTitleInput" type="text" placeholder="例如：雨后的街角小店">
+          </label>
+          <label>
+            <span>记忆地点</span>
+            <input id="tripMemoryLocationInput" type="text" placeholder="例如：京都，哲学之道附近">
+          </label>
+          <label>
+            <span>说明</span>
+            <textarea id="tripMemoryNoteInput" rows="3" placeholder="这一刻为什么值得记住？"></textarea>
+          </label>
+          <div class="inline-fields">
+            <label>
+              <span>情绪</span>
+              <select id="tripMemoryMoodInput">
+                <option value="平静">平静</option>
+                <option value="惊喜">惊喜</option>
+                <option value="好奇">好奇</option>
+                <option value="感动">感动</option>
+                <option value="自由">自由</option>
+                <option value="怀念">怀念</option>
+              </select>
+            </label>
+            <label>
+              <span>标签</span>
+              <input id="tripMemoryTagsInput" type="text" placeholder="街角, 建筑, 雨天">
+            </label>
+          </div>
+        </div>
         <menu class="modal-actions">
           <button class="ghost-button" type="button" id="cancelTripButton">取消</button>
-          <button class="primary-action" type="submit">创建</button>
+          <button class="primary-action" type="submit">创建并保存</button>
         </menu>
       </form>
     </dialog>
 
     <template id="emptyStateTemplate">
       <div class="empty-state">
-        <h3>还没有记录</h3>
-        <p>先添加一张照片或一句说明。这个 Agent 的价值从第一条真实记忆开始长出来。</p>
+        <h3>还没有旅行记忆</h3>
+        <p>点击“新建旅行”，把照片、地点和一句说明一起保存下来。</p>
       </div>
     </template>
 
-    <script src="./main.js?v=8"></script>
+    <script src="./main.js?v=9"></script>
   </body>
 </html>
