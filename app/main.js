@@ -317,14 +317,12 @@
         </div>
         <span class="badge is-private">${escapeHtml(memory.privacyLevel)}</span>
       </div>
-      <div class="agent-grid">
-        ${memory.agentQuestions.map((question, index) => `
-          <div class="agent-card">
-            <strong>问题 ${index + 1}</strong>
-            <p class="meta">${escapeHtml(question)}</p>
-          </div>
-        `).join("")}
-      </div>
+      <details class="agent-questions">
+        <summary>展开 Agent 的 3 个补全问题</summary>
+        <ol>
+          ${memory.agentQuestions.map((question) => `<li>${escapeHtml(question)}</li>`).join("")}
+        </ol>
+      </details>
     `;
   }
 
@@ -499,7 +497,8 @@
 
         ${renderObjectStatus(memory, object)}
 
-        <div class="detail-section">
+        <details class="detail-section detail-fold">
+          <summary>编辑原话和 Agent 摘要</summary>
           <label>
             <span>用户原话</span>
             <textarea id="detailNoteInput" rows="4">${escapeHtml(memory.rawNote)}</textarea>
@@ -509,22 +508,22 @@
             <textarea id="detailSummaryInput" rows="3">${escapeHtml(memory.agentSummary)}</textarea>
           </label>
           <button class="ghost-button" type="button" data-action="save-detail">保存编辑</button>
-        </div>
+        </details>
 
         <div class="detail-section">
           <strong>标签</strong>
           <div class="tag-row">${memory.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
         </div>
 
-        <div class="detail-section">
-          <strong>标注</strong>
+        <details class="detail-section detail-fold">
+          <summary>添加或查看说明点</summary>
           <label>
             <span>说明点</span>
             <input id="annotationInput" type="text" placeholder="例如：门口这盏灯让我停了下来">
           </label>
           <button class="ghost-button" type="button" data-action="add-annotation">添加到 3D 中心</button>
           ${renderAnnotationList(memory)}
-        </div>
+        </details>
       </div>
     `;
   }

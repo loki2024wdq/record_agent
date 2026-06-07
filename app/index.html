@@ -56,11 +56,38 @@
           </div>
         </header>
 
+        <section class="guide-panel" aria-label="使用说明">
+          <details class="guide-card">
+            <summary>
+              <span>怎么操作</span>
+              <small>拍照、写一句话、保存，再生成 2.5D</small>
+            </summary>
+            <ol class="guide-list">
+              <li>点“新建旅行”，给这次旅行起一个名字。</li>
+              <li>点“添加照片”或顶部“导入照片”，选择相机或相册。</li>
+              <li>写一句说明，保存后会出现在时间线里。</li>
+              <li>选择一条记忆，在详情里点“生成 2.5D”，再添加说明点。</li>
+            </ol>
+          </details>
+          <details class="guide-card">
+            <summary>
+              <span>照片存在哪里</span>
+              <small>当前版本只存在这台设备的浏览器里</small>
+            </summary>
+            <p>照片会在保存前压缩成浏览器可保存的图片数据，并和说明一起写入当前浏览器的 localStorage。本原型不会把照片上传到 GitHub、云服务器或其他设备；清除浏览器数据、换浏览器或换手机后，这些本地记录可能不会保留。</p>
+          </details>
+        </section>
+
         <section class="record-panel" id="recordPanel" aria-labelledby="recordTitle">
           <div class="record-intro">
             <p class="eyebrow">今日记录</p>
             <h3 id="recordTitle">把一个有意义的瞬间存下来</h3>
-            <p>照片、地点和原话会先成为记忆草稿，Agent 再帮你补全标题、标签和回看摘要。</p>
+            <p>先拍照或导入，再写一句当时的感受。复杂整理可以稍后慢慢补。</p>
+            <div class="step-chips" aria-label="记录步骤">
+              <span>1 照片</span>
+              <span>2 说明</span>
+              <span>3 保存</span>
+            </div>
           </div>
 
           <form class="record-form" id="memoryForm">
