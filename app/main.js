@@ -1,5 +1,6 @@
 (function () {
   const STORAGE_KEY = "record-agent-state-v1";
+  const APP_RESOURCE_VERSION = "v7";
   const APP_STATE_VERSION = 2;
   const state = loadState();
   let activeView = "timeline";
@@ -26,8 +27,15 @@
     tripStartInput: document.getElementById("tripStartInput"),
     tripEndInput: document.getElementById("tripEndInput"),
     musicToggleButton: document.getElementById("musicToggleButton"),
-    musicStatus: document.getElementById("musicStatus")
+    musicStatus: document.getElementById("musicStatus"),
+    refreshAppButton: document.getElementById("refreshAppButton"),
+    appVersion: document.getElementById("appVersion")
   };
+
+  if (dom.appVersion) {
+    dom.appVersion.textContent = APP_RESOURCE_VERSION;
+    dom.appVersion.title = `当前版本 ${APP_RESOURCE_VERSION}`;
+  }
 
   bindEvents();
   render();
@@ -42,6 +50,9 @@
       document.getElementById("memoryTitleInput").focus();
     });
     dom.musicToggleButton.addEventListener("click", toggleMusic);
+    if (dom.refreshAppButton) {
+      dom.refreshAppButton.addEventListener("click", refreshApp);
+    }
 
     dom.tripList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-trip-id]");
@@ -137,6 +148,33 @@
       if (!stage) return;
       bindDepthDrag(stage, event);
     });
+  }
+
+  async function refreshApp() {
+    if (dom.musicStatus) {
+      dom.musicStatus.textContent = "正在刷新到新版...";
+      dom.musicStatus.style.display = "block";
+    }
+
+    try {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.update()));
+      }
+
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter((key) => key.startsWith("record-agent-pwa"))
+            .map((key) => caches.delete(key))
+        );
+      }
+    } catch (error) {
+      console.warn("Refresh cache failed, reloading anyway.", error);
+    } finally {
+      window.location.reload();
+    }
   }
 
   async function createMemoryFromForm(file, options = {}) {

@@ -11,7 +11,7 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" href="./assets/icon-192.png" sizes="192x192">
     <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./styles.css?v=7">
   </head>
   <body>
     <div class="app-shell">
@@ -22,6 +22,7 @@
             <p class="eyebrow">Memory Agent</p>
             <h1>旅行意义记录</h1>
           </div>
+          <span class="app-version" id="appVersion">v7</span>
         </div>
 
         <button class="primary-action" id="newTripButton" type="button">新建旅行</button>
@@ -52,6 +53,7 @@
           <div class="topbar-actions">
             <button class="ghost-button music-button" id="musicToggleButton" type="button" aria-pressed="false">开启音乐</button>
             <span class="music-status" id="musicStatus" aria-live="polite"></span>
+            <button class="ghost-button refresh-button" id="refreshAppButton" type="button">刷新新版</button>
             <label class="ghost-button" for="quickPhotoInput">导入照片</label>
             <input class="visually-hidden" id="quickPhotoInput" type="file" accept="image/*" capture="environment">
             <button class="ghost-button" id="focusRecordButton" type="button">新增记忆</button>
@@ -197,6 +199,6 @@
       </div>
     </template>
 
-    <script src="./main.js"></script>
+    <script src="./main.js?v=7"></script>
   </body>
 </html>

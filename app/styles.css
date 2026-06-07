@@ -102,6 +102,7 @@ img {
 }
 
 .brand {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -131,6 +132,19 @@ img {
 
 .brand h1 {
   font-size: 20px;
+}
+
+.app-version {
+  margin-left: auto;
+  align-self: flex-start;
+  padding: 3px 7px;
+  color: var(--brand-dark);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  background: var(--brand-soft);
+  border: 1px solid #c8dfd0;
+  border-radius: 999px;
 }
 
 .eyebrow {
@@ -188,6 +202,10 @@ img {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.refresh-button {
+  color: var(--brand-dark);
 }
 
 .ghost-button:hover,
@@ -595,11 +613,25 @@ textarea:focus {
 }
 
 .timeline-list {
+  position: relative;
   display: grid;
-  gap: 2px;
+  gap: 4px;
+}
+
+.timeline-list::before {
+  content: "";
+  position: absolute;
+  left: 86px;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(66, 111, 90, 0), rgba(66, 111, 90, 0.34), rgba(66, 111, 90, 0));
+  border-radius: 999px;
 }
 
 .timeline-item {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr);
   gap: 10px;
@@ -625,7 +657,6 @@ textarea:focus {
   text-align: left;
   background: transparent;
   border: 0;
-  border-left: 1px solid rgba(66, 111, 90, 0.22);
 }
 
 .timeline-entry:hover .timeline-main {
@@ -634,6 +665,8 @@ textarea:focus {
 }
 
 .timeline-dot {
+  position: relative;
+  z-index: 1;
   width: 13px;
   height: 13px;
   margin-left: -7px;
@@ -955,18 +988,31 @@ textarea:focus {
   min-height: 430px;
   overflow: hidden;
   background:
-    linear-gradient(90deg, rgba(66, 111, 90, 0.08) 1px, transparent 1px),
-    linear-gradient(rgba(66, 111, 90, 0.08) 1px, transparent 1px),
-    radial-gradient(circle at 20% 22%, rgba(245, 233, 222, 0.86), transparent 24%),
-    radial-gradient(circle at 80% 74%, rgba(220, 239, 227, 0.9), transparent 28%),
+    linear-gradient(90deg, rgba(66, 111, 90, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(66, 111, 90, 0.12) 1px, transparent 1px),
+    radial-gradient(circle at 18% 20%, rgba(245, 233, 222, 0.95), transparent 25%),
+    radial-gradient(circle at 78% 74%, rgba(220, 239, 227, 0.98), transparent 29%),
+    linear-gradient(135deg, rgba(255, 253, 248, 0.82), rgba(232, 242, 234, 0.52)),
     #fbfaf5;
   background-size: 46px 46px, 46px 46px, auto, auto, auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
 
+.map-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  z-index: 0;
+  border: 1px solid rgba(66, 111, 90, 0.14);
+  border-radius: 8px;
+  box-shadow: inset 0 0 34px rgba(66, 111, 90, 0.08);
+  pointer-events: none;
+}
+
 .map-water {
   position: absolute;
+  z-index: 0;
   left: -8%;
   right: -8%;
   bottom: -36%;
@@ -978,6 +1024,7 @@ textarea:focus {
 
 .map-land {
   position: absolute;
+  z-index: 1;
   background: rgba(255, 253, 248, 0.7);
   border: 1px solid rgba(66, 111, 90, 0.14);
   box-shadow: inset 0 0 40px rgba(66, 111, 90, 0.06);
@@ -1003,6 +1050,7 @@ textarea:focus {
 
 .map-route {
   position: absolute;
+  z-index: 2;
   inset: 54px 44px 66px;
   border: 2px dashed rgba(66, 111, 90, 0.35);
   border-radius: 50%;
@@ -1011,6 +1059,7 @@ textarea:focus {
 
 .map-marker {
   position: absolute;
+  z-index: 3;
   left: var(--x);
   top: var(--y);
   display: grid;
@@ -1023,6 +1072,11 @@ textarea:focus {
   border-radius: var(--radius);
   box-shadow: 0 12px 28px rgba(22, 35, 27, 0.12);
   transform: translate(-50%, -50%);
+}
+
+.map-marker:hover {
+  border-color: #a8c5b1;
+  transform: translate(-50%, -50%) translateY(-2px);
 }
 
 .map-pin {
@@ -1250,6 +1304,10 @@ textarea:focus {
   .timeline-item {
     grid-template-columns: 58px minmax(0, 1fr);
     gap: 8px;
+  }
+
+  .timeline-list::before {
+    left: 66px;
   }
 
   .timeline-item time {
