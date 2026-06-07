@@ -1,7 +1,7 @@
 (function () {
   const STORAGE_KEY = "record-agent-state-v1";
-  const APP_RESOURCE_VERSION = "v9";
-  const APP_STATE_VERSION = 3;
+  const APP_RESOURCE_VERSION = "v10";
+  const APP_STATE_VERSION = 4;
   const state = loadState();
   let activeView = "timeline";
   let searchQuery = "";
@@ -16,6 +16,7 @@
     activeTripMeta: document.getElementById("activeTripMeta"),
     memoryForm: document.getElementById("memoryForm"),
     memoryPhotoInput: document.getElementById("memoryPhotoInput"),
+    addMemoryButton: document.getElementById("addMemoryButton"),
     agentStrip: document.getElementById("agentStrip"),
     viewContent: document.getElementById("viewContent"),
     inspector: document.getElementById("inspector"),
@@ -27,12 +28,6 @@
     tripLocationInput: document.getElementById("tripLocationInput"),
     tripStartInput: document.getElementById("tripStartInput"),
     tripEndInput: document.getElementById("tripEndInput"),
-    tripMemoryPhotoInput: document.getElementById("tripMemoryPhotoInput"),
-    tripMemoryTitleInput: document.getElementById("tripMemoryTitleInput"),
-    tripMemoryLocationInput: document.getElementById("tripMemoryLocationInput"),
-    tripMemoryNoteInput: document.getElementById("tripMemoryNoteInput"),
-    tripMemoryMoodInput: document.getElementById("tripMemoryMoodInput"),
-    tripMemoryTagsInput: document.getElementById("tripMemoryTagsInput"),
     musicStatus: document.getElementById("musicStatus"),
     appVersion: document.getElementById("appVersion")
   };
@@ -54,6 +49,7 @@
     });
     document.getElementById("closeTripDialog").addEventListener("click", closeTripDialog);
     document.getElementById("cancelTripButton").addEventListener("click", closeTripDialog);
+    dom.addMemoryButton.addEventListener("click", openMemoryComposer);
 
     dom.tripList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-trip-id]");
@@ -65,7 +61,7 @@
       render();
     });
 
-    dom.tripForm.addEventListener("submit", async (event) => {
+    dom.tripForm.addEventListener("submit", (event) => {
       event.preventDefault();
       requestAmbientMusic();
       const title = dom.tripTitleInput.value.trim();
@@ -81,60 +77,9 @@
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-
-      const memoryFile = dom.tripMemoryPhotoInput.files[0];
-      const memoryTitle = dom.tripMemoryTitleInput.value.trim();
-      const memoryNote = dom.tripMemoryNoteInput.value.trim();
-      const memoryLocation = dom.tripMemoryLocationInput.value.trim() || trip.locations[0] || "旅途中";
-      const memoryTags = dom.tripMemoryTagsInput.value.trim();
-      const shouldCreateMemory = Boolean(memoryFile || memoryTitle || memoryNote || memoryTags);
-
       state.trips.unshift(trip);
       state.activeTripId = trip.id;
       state.selectedMemoryId = null;
-
-      if (shouldCreateMemory) {
-        const media = memoryFile
-          ? {
-              id: createId("media"),
-              type: "image",
-              source: "user",
-              dataUrl: await resizeImage(memoryFile),
-              createdAt: new Date().toISOString()
-            }
-          : null;
-        const agent = buildAgentDraft({
-          title: memoryTitle,
-          note: memoryNote,
-          locationName: memoryLocation,
-          tags: memoryTags
-        });
-        const memory = {
-          id: createId("memory"),
-          tripId: trip.id,
-          title: memoryTitle || agent.title,
-          rawNote: memoryNote || "这是一条稍后补全的旅行记忆。",
-          agentSummary: agent.summary,
-          agentQuestions: agent.questions,
-          occurredAt: new Date().toISOString(),
-          location: createLocation(memoryLocation),
-          mediaIds: media ? [media.id] : [],
-          object3DIds: [],
-          tags: uniqueTags([...parseTags(memoryTags), ...agent.tags]),
-          mood: dom.tripMemoryMoodInput.value,
-          privacyLevel: "private",
-          annotations: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        if (media) {
-          state.media.unshift(media);
-          trip.coverMediaId = media.id;
-        }
-        state.memories.unshift(memory);
-        state.selectedMemoryId = memory.id;
-      }
-
       activeView = "timeline";
       updateActiveTab();
       saveState();
@@ -252,6 +197,8 @@
       dom.memoryForm.reset();
       moodInput.value = "平静";
     }
+    dom.recordPanel.classList.add("is-hidden");
+    activeView = "timeline";
     render();
   }
 
@@ -988,6 +935,16 @@
     }
   }
 
+  function openMemoryComposer() {
+    const trip = getActiveTrip();
+    if (!trip) return;
+    requestAmbientMusic();
+    dom.recordPanel.classList.remove("is-hidden");
+    document.getElementById("memoryLocationInput").value = trip.locations[0] || "";
+    dom.recordPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("memoryTitleInput").focus();
+  }
+
   function closeTripDialog() {
     dom.tripDialog.close();
   }
@@ -998,7 +955,7 @@
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.uiVersion !== APP_STATE_VERSION) {
-          if (isDemoOnlyState(parsed)) {
+          if (isDemoOnlyState(parsed) || !parsed.trips?.length) {
             return createSeedState();
           }
           parsed.selectedMemoryId = null;
@@ -1026,13 +983,60 @@
   }
 
   function createSeedState() {
+    const tripId = createId("trip");
+    const mediaId = createId("media");
+    const memoryId = createId("memory");
+    const image = createSampleImage("雨后的街角");
     return {
-      activeTripId: "",
+      activeTripId: tripId,
       selectedMemoryId: null,
       uiVersion: APP_STATE_VERSION,
-      trips: [],
-      memories: [],
-      media: [],
+      trips: [
+        {
+          id: tripId,
+          title: "京都 2026 春",
+          startDate: "2026-04-05",
+          endDate: "2026-04-12",
+          locations: ["日本京都"],
+          coverMediaId: mediaId,
+          status: "active",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ],
+      memories: [
+        {
+          id: memoryId,
+          tripId,
+          title: "雨后的街角小店",
+          rawNote: "下雨刚停，店门口的灯和湿掉的石板路让我觉得这一刻很安静。",
+          agentSummary: "这条记忆关于日本京都：雨后的小店、灯光和湿润的街道共同构成了一个平静的停顿。",
+          agentQuestions: [
+            "你当时为什么愿意在这里停下来？",
+            "这张照片里最想保留的是灯光、路面，还是那家店？",
+            "如果把它做成 3D 记忆对象，你想标注哪个细节？"
+          ],
+          occurredAt: new Date().toISOString(),
+          location: createLocation("京都，哲学之道附近"),
+          mediaIds: [mediaId],
+          object3DIds: [],
+          tags: ["雨天", "街角", "小店"],
+          mood: "平静",
+          privacyLevel: "private",
+          annotations: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ],
+      media: [
+        {
+          id: mediaId,
+          type: "image",
+          source: "user",
+          dataUrl: image,
+          createdAt: new Date().toISOString()
+        }
+      ],
       objects3D: []
     };
   }

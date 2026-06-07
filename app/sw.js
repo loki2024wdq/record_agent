@@ -1,9 +1,9 @@
-const CACHE_NAME = "record-agent-pwa-v9";
+const CACHE_NAME = "record-agent-pwa-v10";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=9",
-  "./main.js?v=9",
+  "./styles.css?v=10",
+  "./main.js?v=10",
   "./manifest.webmanifest",
   "./assets/icon.svg",
   "./assets/icon-192.png",
