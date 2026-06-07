@@ -1,6 +1,6 @@
 (function () {
   const STORAGE_KEY = "record-agent-state-v1";
-  const APP_RESOURCE_VERSION = "v10";
+  const APP_RESOURCE_VERSION = "v11";
   const APP_STATE_VERSION = 4;
   const state = loadState();
   let activeView = "timeline";
@@ -49,7 +49,7 @@
     });
     document.getElementById("closeTripDialog").addEventListener("click", closeTripDialog);
     document.getElementById("cancelTripButton").addEventListener("click", closeTripDialog);
-    dom.addMemoryButton.addEventListener("click", openMemoryComposer);
+    dom.addMemoryButton.addEventListener("click", toggleMemoryComposer);
 
     dom.tripList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-trip-id]");
@@ -106,10 +106,20 @@
       renderView();
     });
 
-    dom.viewContent.addEventListener("click", (event) => {
-      const card = event.target.closest("[data-memory-id]");
+    dom.viewContent.addEventListener("click", async (event) => {
+      const action = event.target.closest("[data-action]");
+      if (action) {
+        const container = action.closest("[data-memory-id]");
+        const memoryId = container?.dataset.memoryId || state.selectedMemoryId;
+        if (memoryId) await handleMemoryAction(action.dataset.action, memoryId);
+        return;
+      }
+
+      const entry = event.target.closest(".timeline-entry");
+      if (!entry) return;
+      const card = entry.closest("[data-memory-id]");
       if (!card) return;
-      state.selectedMemoryId = card.dataset.memoryId;
+      state.selectedMemoryId = state.selectedMemoryId === card.dataset.memoryId ? null : card.dataset.memoryId;
       saveState();
       render();
     });
@@ -119,22 +129,7 @@
       if (!action) return;
       const memory = getSelectedMemory();
       if (!memory) return;
-
-      if (action.dataset.action === "generate-3d") {
-        await start3DGeneration(memory.id);
-      }
-
-      if (action.dataset.action === "export-card") {
-        exportMemoryCard(memory.id);
-      }
-
-      if (action.dataset.action === "save-detail") {
-        saveMemoryDetail(memory.id);
-      }
-
-      if (action.dataset.action === "add-annotation") {
-        addAnnotation(memory.id);
-      }
+      await handleMemoryAction(action.dataset.action, memory.id);
     });
 
     dom.inspector.addEventListener("pointerdown", (event) => {
@@ -142,6 +137,30 @@
       if (!stage) return;
       bindDepthDrag(stage, event);
     });
+
+    dom.viewContent.addEventListener("pointerdown", (event) => {
+      const stage = event.target.closest(".depth-stage");
+      if (!stage) return;
+      bindDepthDrag(stage, event);
+    });
+  }
+
+  async function handleMemoryAction(action, memoryId) {
+    if (action === "generate-3d") {
+      await start3DGeneration(memoryId);
+    }
+
+    if (action === "export-card") {
+      exportMemoryCard(memoryId);
+    }
+
+    if (action === "save-detail") {
+      saveMemoryDetail(memoryId);
+    }
+
+    if (action === "add-annotation") {
+      addAnnotation(memoryId);
+    }
   }
 
   async function createMemoryFromForm(file, options = {}) {
@@ -197,7 +216,7 @@
       dom.memoryForm.reset();
       moodInput.value = "平静";
     }
-    dom.recordPanel.classList.add("is-hidden");
+    closeMemoryComposer();
     activeView = "timeline";
     render();
   }
@@ -290,36 +309,18 @@
     if (!trip) {
       dom.activeTripTitle.textContent = "准备中";
       dom.activeTripMeta.textContent = "当前旅行";
+      dom.addMemoryButton.hidden = true;
       return;
     }
     const memories = getTripMemories(trip.id);
+    dom.addMemoryButton.hidden = false;
     dom.activeTripTitle.textContent = trip.title;
     dom.activeTripMeta.textContent = `${formatDateRange(trip.startDate, trip.endDate)} · ${memories.length} 条记忆 · ${trip.locations.join("、")}`;
   }
 
   function renderAgentStrip() {
-    const memory = getSelectedMemory();
-    if (!memory) {
-      dom.agentStrip.hidden = true;
-      dom.agentStrip.innerHTML = "";
-      return;
-    }
-
-    dom.agentStrip.hidden = false;
-    dom.agentStrip.innerHTML = `
-      <div class="agent-header">
-        <div>
-          <p class="eyebrow">Agent 对 ${escapeHtml(memory.title)} 的整理</p>
-          <strong>${escapeHtml(memory.agentSummary)}</strong>
-        </div>
-      </div>
-      <details class="agent-questions">
-        <summary>展开 Agent 的 3 个补全问题</summary>
-        <ol>
-          ${memory.agentQuestions.map((question) => `<li>${escapeHtml(question)}</li>`).join("")}
-        </ol>
-      </details>
-    `;
+    dom.agentStrip.hidden = true;
+    dom.agentStrip.innerHTML = "";
   }
 
   function renderView() {
@@ -353,29 +354,75 @@
   }
 
   function renderTimelineItem(memory) {
-    const object = getObject3D(memory.object3DIds[0]);
-    const hasPhoto = hasUserPhoto(memory);
-    const badge = object
-      ? object.status === "succeeded"
-        ? '<span class="badge is-ready">3D 已生成</span>'
-        : '<span class="badge is-processing">3D 建模中</span>'
-      : hasPhoto
-        ? '<span class="badge">可生成 3D</span>'
-        : '<span class="badge">无照片</span>';
+    const isExpanded = memory.id === state.selectedMemoryId;
     return `
-      <article class="timeline-item" data-memory-id="${memory.id}">
+      <article class="timeline-item${isExpanded ? " is-expanded" : ""}" data-memory-id="${memory.id}">
         <time datetime="${escapeAttr(memory.occurredAt)}">${formatTimelineDate(memory.occurredAt)}</time>
-        <button class="timeline-entry" type="button">
-          <span class="timeline-dot" aria-hidden="true"></span>
-          <span class="timeline-main">
-            <span class="status-row">
-              ${badge}
+        <div>
+          <button class="timeline-entry" type="button" aria-expanded="${isExpanded ? "true" : "false"}">
+            <span class="timeline-dot" aria-hidden="true"></span>
+            <span class="timeline-main">
+              <strong>${escapeHtml(memory.title)}</strong>
+              <span class="meta">${escapeHtml(memory.location.name)} · ${escapeHtml(truncate(memory.rawNote, 54))}</span>
+              <span class="timeline-hint">${isExpanded ? "点击收起细节" : "点击查看 3D、描述和编辑"}</span>
             </span>
-            <strong>${escapeHtml(memory.title)}</strong>
-            <span class="meta">${escapeHtml(memory.location.name)} · ${escapeHtml(truncate(memory.rawNote, 54))}</span>
-          </span>
-        </button>
+          </button>
+          ${isExpanded ? renderTimelineDetail(memory) : ""}
+        </div>
       </article>
+    `;
+  }
+
+  function renderTimelineDetail(memory) {
+    const object = getObject3D(memory.object3DIds[0]);
+    const hasReadyObject = object?.status === "succeeded";
+    const hasPhoto = hasUserPhoto(memory);
+    const media = hasPhoto ? getMedia(memory.mediaIds[0]) : null;
+
+    return `
+      <div class="timeline-detail">
+        ${media ? `<img class="detail-cover" src="${media.dataUrl}" alt="${escapeAttr(memory.title)}">` : '<div class="detail-cover detail-cover-empty">这条记忆还没有照片</div>'}
+        <div>
+          <p class="eyebrow">${escapeHtml(memory.location.name)}</p>
+          <h3>${escapeHtml(memory.title)}</h3>
+          <p class="meta">${formatDateTime(memory.occurredAt)} · ${escapeHtml(memory.mood)}</p>
+        </div>
+
+        <div class="detail-actions">
+          ${hasPhoto ? `<button class="primary-action" type="button" data-action="generate-3d">${hasReadyObject ? "重新生成 3D" : object ? "查看 3D" : "生成 3D"}</button>` : '<span class="disabled-action">添加照片后可生成 3D</span>'}
+          <button class="ghost-button" type="button" data-action="export-card">导出卡片</button>
+        </div>
+
+        ${renderObjectStatus(memory, object)}
+
+        <details class="detail-section detail-fold" open>
+          <summary>编辑原话和摘要</summary>
+          <label>
+            <span>用户原话</span>
+            <textarea id="detailNoteInput" rows="4">${escapeHtml(memory.rawNote)}</textarea>
+          </label>
+          <label>
+            <span>摘要</span>
+            <textarea id="detailSummaryInput" rows="3">${escapeHtml(memory.agentSummary)}</textarea>
+          </label>
+          <button class="ghost-button" type="button" data-action="save-detail">保存编辑</button>
+        </details>
+
+        <div class="detail-section">
+          <strong>标签</strong>
+          <div class="tag-row">${memory.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
+        </div>
+
+        <details class="detail-section detail-fold">
+          <summary>添加或查看说明点</summary>
+          <label>
+            <span>说明点</span>
+            <input id="annotationInput" type="text" placeholder="例如：门口这盏灯让我停了下来">
+          </label>
+          <button class="ghost-button" type="button" data-action="add-annotation">添加到 3D 中心</button>
+          ${renderAnnotationList(memory)}
+        </details>
+      </div>
     `;
   }
 
@@ -481,65 +528,9 @@
   }
 
   function renderInspector() {
-    const memory = getSelectedMemory();
-    if (!memory) {
-      dom.appShell.classList.add("is-inspector-hidden");
-      dom.inspector.hidden = true;
-      dom.inspector.innerHTML = "";
-      return;
-    }
-
-    dom.appShell.classList.remove("is-inspector-hidden");
-    dom.inspector.hidden = false;
-    const object = getObject3D(memory.object3DIds[0]);
-    const hasReadyObject = object?.status === "succeeded";
-    const hasPhoto = hasUserPhoto(memory);
-    const media = hasPhoto ? getMedia(memory.mediaIds[0]) : null;
-    dom.inspector.innerHTML = `
-      <div class="detail">
-        ${media ? `<img class="detail-cover" src="${media.dataUrl}" alt="${escapeAttr(memory.title)}">` : '<div class="detail-cover detail-cover-empty">这条记忆还没有照片</div>'}
-        <div>
-          <p class="eyebrow">${escapeHtml(memory.location.name)}</p>
-          <h3>${escapeHtml(memory.title)}</h3>
-          <p class="meta">${formatDateTime(memory.occurredAt)} · ${escapeHtml(memory.mood)}</p>
-        </div>
-
-        <div class="detail-actions">
-          ${hasPhoto ? `<button class="primary-action" type="button" data-action="generate-3d">${hasReadyObject ? "重新生成 3D" : object ? "查看 3D" : "生成 3D"}</button>` : '<span class="disabled-action">添加照片后可生成 3D</span>'}
-          <button class="ghost-button" type="button" data-action="export-card">导出卡片</button>
-        </div>
-
-        ${renderObjectStatus(memory, object)}
-
-        <details class="detail-section detail-fold">
-          <summary>编辑原话和 Agent 摘要</summary>
-          <label>
-            <span>用户原话</span>
-            <textarea id="detailNoteInput" rows="4">${escapeHtml(memory.rawNote)}</textarea>
-          </label>
-          <label>
-            <span>Agent 摘要</span>
-            <textarea id="detailSummaryInput" rows="3">${escapeHtml(memory.agentSummary)}</textarea>
-          </label>
-          <button class="ghost-button" type="button" data-action="save-detail">保存编辑</button>
-        </details>
-
-        <div class="detail-section">
-          <strong>标签</strong>
-          <div class="tag-row">${memory.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
-        </div>
-
-        <details class="detail-section detail-fold">
-          <summary>添加或查看说明点</summary>
-          <label>
-            <span>说明点</span>
-            <input id="annotationInput" type="text" placeholder="例如：门口这盏灯让我停了下来">
-          </label>
-          <button class="ghost-button" type="button" data-action="add-annotation">添加到 3D 中心</button>
-          ${renderAnnotationList(memory)}
-        </details>
-      </div>
-    `;
+    dom.appShell.classList.add("is-inspector-hidden");
+    dom.inspector.hidden = true;
+    dom.inspector.innerHTML = "";
   }
 
   function renderObjectStatus(memory, object) {
@@ -633,7 +624,6 @@
     }
 
     object.assetUrl = `local://${object.id}`;
-    activeView = "objects";
     saveState();
     render();
   }
@@ -940,9 +930,23 @@
     if (!trip) return;
     requestAmbientMusic();
     dom.recordPanel.classList.remove("is-hidden");
+    dom.addMemoryButton.textContent = "收起";
     document.getElementById("memoryLocationInput").value = trip.locations[0] || "";
     dom.recordPanel.scrollIntoView({ behavior: "smooth", block: "start" });
     document.getElementById("memoryTitleInput").focus();
+  }
+
+  function closeMemoryComposer() {
+    dom.recordPanel.classList.add("is-hidden");
+    dom.addMemoryButton.textContent = "添加记忆";
+  }
+
+  function toggleMemoryComposer() {
+    if (dom.recordPanel.classList.contains("is-hidden")) {
+      openMemoryComposer();
+    } else {
+      closeMemoryComposer();
+    }
   }
 
   function closeTripDialog() {
