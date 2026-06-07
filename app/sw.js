@@ -1,4 +1,4 @@
-const CACHE_NAME = "record-agent-pwa-v5";
+const CACHE_NAME = "record-agent-pwa-v6";
 const APP_ASSETS = [
   "./",
   "./index.html",

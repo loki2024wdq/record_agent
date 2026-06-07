@@ -25,7 +25,8 @@
     tripLocationInput: document.getElementById("tripLocationInput"),
     tripStartInput: document.getElementById("tripStartInput"),
     tripEndInput: document.getElementById("tripEndInput"),
-    musicToggleButton: document.getElementById("musicToggleButton")
+    musicToggleButton: document.getElementById("musicToggleButton"),
+    musicStatus: document.getElementById("musicStatus")
   };
 
   bindEvents();
@@ -385,17 +386,30 @@
     }
     dom.viewContent.innerHTML = `
       <div class="map-panel">
-        <div class="map-route" aria-hidden="true"></div>
-        ${memories.map((memory, index) => {
-          const position = mapPosition(memory.location.name, index);
-          return `
-            <button class="map-marker" type="button" data-memory-id="${memory.id}" style="--x: ${position.x}%; --y: ${position.y}%">
-              <strong>${escapeHtml(memory.title)}</strong>
-              <small>${escapeHtml(memory.location.name)}</small>
-              <small>${formatDateTime(memory.occurredAt)}</small>
-            </button>
-          `;
-        }).join("")}
+        <div class="map-summary">
+          <div>
+            <p class="eyebrow">Memory Map</p>
+            <strong>本地记忆地图</strong>
+          </div>
+          <span class="badge">${memories.length} 个地点</span>
+        </div>
+        <div class="map-canvas" role="img" aria-label="根据记忆地点生成的示意地图">
+          <div class="map-water" aria-hidden="true"></div>
+          <div class="map-land one" aria-hidden="true"></div>
+          <div class="map-land two" aria-hidden="true"></div>
+          <div class="map-route" aria-hidden="true"></div>
+          ${memories.map((memory, index) => {
+            const position = mapPosition(memory.location.name, index);
+            return `
+              <button class="map-marker" type="button" data-memory-id="${memory.id}" style="--x: ${position.x}%; --y: ${position.y}%">
+                <span class="map-pin" aria-hidden="true"></span>
+                <strong>${escapeHtml(memory.title)}</strong>
+                <small>${escapeHtml(memory.location.name)}</small>
+                <small>${formatDateTime(memory.occurredAt)}</small>
+              </button>
+            `;
+          }).join("")}
+        </div>
       </div>
     `;
   }
@@ -631,13 +645,19 @@
       stopMusic();
       return;
     }
-    await startMusic();
+    try {
+      await startMusic();
+    } catch (error) {
+      dom.musicToggleButton.textContent = "音乐未开启";
+      dom.musicStatus.textContent = "浏览器阻止了音频，请再点一次或检查手机静音。";
+    }
   }
 
   async function startMusic() {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) {
       dom.musicToggleButton.textContent = "音乐不可用";
+      dom.musicStatus.textContent = "当前浏览器不支持 Web Audio。";
       return;
     }
 
@@ -649,8 +669,8 @@
       const feedback = context.createGain();
       const filter = context.createBiquadFilter();
 
-      master.gain.value = 0.11;
-      padGain.gain.value = 0.028;
+      master.gain.value = 0.24;
+      padGain.gain.value = 0.075;
       delayNode.delayTime.value = 0.42;
       feedback.gain.value = 0.22;
       filter.type = "lowpass";
@@ -677,11 +697,24 @@
     }
 
     await music.context.resume();
+    if (music.context.state !== "running") {
+      dom.musicStatus.textContent = "音频还未启动，请再点一次。";
+      return;
+    }
     music.playing = true;
     startPad();
+    playStartupChime();
     dom.musicToggleButton.textContent = "音乐播放中";
+    dom.musicStatus.textContent = "如果听不到，请确认手机没有静音并调高媒体音量。";
     dom.musicToggleButton.setAttribute("aria-pressed", "true");
     scheduleAmbientNote();
+  }
+
+  function playStartupChime() {
+    const now = music.context.currentTime;
+    playTone(523.25, now, 0.85, 0.16);
+    playTone(659.25, now + 0.1, 0.9, 0.12);
+    playTone(783.99, now + 0.2, 1.1, 0.1);
   }
 
   function startPad() {
@@ -691,7 +724,7 @@
       const gain = music.context.createGain();
       oscillator.type = index === 1 ? "triangle" : "sine";
       oscillator.frequency.value = frequency;
-      gain.gain.value = index === 1 ? 0.18 : 0.11;
+      gain.gain.value = index === 1 ? 0.26 : 0.18;
       oscillator.connect(gain);
       gain.connect(music.padGain);
       oscillator.start();
@@ -704,8 +737,8 @@
     const now = music.context.currentTime;
     const note = music.notes[music.step % music.notes.length];
     const harmony = music.notes[(music.step + 3) % music.notes.length] / 2;
-    playTone(note, now, 2.8, 0.055);
-    playTone(harmony, now + 0.04, 3.2, 0.036);
+    playTone(note, now, 2.8, 0.095);
+    playTone(harmony, now + 0.04, 3.2, 0.06);
     music.step += music.step % 4 === 3 ? 2 : 1;
     music.timers.push(window.setTimeout(scheduleAmbientNote, 1450));
   }
@@ -738,6 +771,7 @@
     });
     music.padOscillators = [];
     dom.musicToggleButton.textContent = "开启音乐";
+    dom.musicStatus.textContent = "";
     dom.musicToggleButton.setAttribute("aria-pressed", "false");
   }
 
