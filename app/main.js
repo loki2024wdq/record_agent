@@ -1,6 +1,6 @@
 (function () {
   const STORAGE_KEY = "record-agent-state-v1";
-  const APP_RESOURCE_VERSION = "v7";
+  const APP_RESOURCE_VERSION = "v8";
   const APP_STATE_VERSION = 2;
   const state = loadState();
   let activeView = "timeline";
