@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#2f6f50">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="旅行记忆">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>旅行意义记录 Agent</title>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./assets/icon-192.png" sizes="192x192">
+    <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="旅行列表">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">3D</div>
+          <div>
+            <p class="eyebrow">Memory Agent</p>
+            <h1>旅行意义记录</h1>
+          </div>
+        </div>
+
+        <button class="primary-action" id="newTripButton" type="button">新建旅行</button>
+
+        <div class="sidebar-section">
+          <div class="section-heading">
+            <span>我的旅行</span>
+            <span id="tripCount">0</span>
+          </div>
+          <div class="trip-list" id="tripList"></div>
+        </div>
+
+        <div class="privacy-panel">
+          <span class="status-dot"></span>
+          <div>
+            <strong>默认私密</strong>
+            <p>所有记录先保存在本机浏览器，本原型不会上传照片。</p>
+          </div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="activeTripMeta">当前旅行</p>
+            <h2 id="activeTripTitle">准备中</h2>
+          </div>
+          <div class="topbar-actions">
+            <label class="ghost-button" for="quickPhotoInput">导入照片</label>
+            <input class="visually-hidden" id="quickPhotoInput" type="file" accept="image/*" capture="environment">
+            <button class="ghost-button" id="focusRecordButton" type="button">新增记忆</button>
+          </div>
+        </header>
+
+        <section class="record-panel" id="recordPanel" aria-labelledby="recordTitle">
+          <div class="record-intro">
+            <p class="eyebrow">今日记录</p>
+            <h3 id="recordTitle">把一个有意义的瞬间存下来</h3>
+            <p>照片、地点和原话会先成为记忆草稿，Agent 再帮你补全标题、标签和回看摘要。</p>
+          </div>
+
+          <form class="record-form" id="memoryForm">
+            <label class="media-drop" for="memoryPhotoInput">
+              <input id="memoryPhotoInput" type="file" accept="image/*" capture="environment">
+              <span class="media-drop-icon">+</span>
+              <strong>添加照片</strong>
+              <small>支持相机或相册，保存前会自动压缩</small>
+            </label>
+
+            <div class="form-fields">
+              <label>
+                <span>标题</span>
+                <input id="memoryTitleInput" name="title" type="text" placeholder="例如：雨后的寺门">
+              </label>
+              <label>
+                <span>地点</span>
+                <input id="memoryLocationInput" name="location" type="text" placeholder="例如：京都，南禅寺附近">
+              </label>
+              <label>
+                <span>说明</span>
+                <textarea id="memoryNoteInput" name="note" rows="4" placeholder="这里为什么值得记住？可以直接写一句很粗糙的话。"></textarea>
+              </label>
+              <div class="inline-fields">
+                <label>
+                  <span>情绪</span>
+                  <select id="memoryMoodInput" name="mood">
+                    <option value="平静">平静</option>
+                    <option value="惊喜">惊喜</option>
+                    <option value="好奇">好奇</option>
+                    <option value="感动">感动</option>
+                    <option value="自由">自由</option>
+                    <option value="怀念">怀念</option>
+                  </select>
+                </label>
+                <label>
+                  <span>标签</span>
+                  <input id="memoryTagsInput" name="tags" type="text" placeholder="街角, 建筑, 雨天">
+                </label>
+              </div>
+              <button class="primary-action" type="submit">保存记忆</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="agent-strip" id="agentStrip" aria-live="polite"></section>
+
+        <section class="view-toolbar" aria-label="记忆视图">
+          <div class="tabs" role="tablist">
+            <button class="tab is-active" data-view="timeline" type="button">时间线</button>
+            <button class="tab" data-view="map" type="button">地图</button>
+            <button class="tab" data-view="objects" type="button">3D 记忆库</button>
+            <button class="tab" data-view="review" type="button">旅行回顾</button>
+          </div>
+          <label class="search-box">
+            <span>搜索</span>
+            <input id="searchInput" type="search" placeholder="地点、标签、物件或一句回忆">
+          </label>
+        </section>
+
+        <section class="view-content" id="viewContent" aria-live="polite"></section>
+      </main>
+
+      <aside class="inspector" id="inspector" aria-label="记忆详情"></aside>
+    </div>
+
+    <dialog class="modal" id="tripDialog">
+      <form method="dialog" class="modal-card" id="tripForm">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Trip</p>
+            <h3>新建旅行</h3>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="closeTripDialog" aria-label="关闭">×</button>
+        </div>
+        <label>
+          <span>旅行名称</span>
+          <input id="tripTitleInput" type="text" required placeholder="例如：京都 2026 春">
+        </label>
+        <label>
+          <span>主要地点</span>
+          <input id="tripLocationInput" type="text" placeholder="例如：日本京都">
+        </label>
+        <div class="inline-fields">
+          <label>
+            <span>开始日期</span>
+            <input id="tripStartInput" type="date">
+          </label>
+          <label>
+            <span>结束日期</span>
+            <input id="tripEndInput" type="date">
+          </label>
+        </div>
+        <menu class="modal-actions">
+          <button class="ghost-button" type="button" id="cancelTripButton">取消</button>
+          <button class="primary-action" type="submit">创建</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <h3>还没有记录</h3>
+        <p>先添加一张照片或一句说明。这个 Agent 的价值从第一条真实记忆开始长出来。</p>
+      </div>
+    </template>
+
+    <script src="./main.js"></script>
+  </body>
+</html>

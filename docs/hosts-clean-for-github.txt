@@ -1,0 +1,8 @@
+# Default local host entries
+127.0.0.1 localhost
+::1 localhost
+
+# GitHub temporary 202606
+140.82.112.4 github.com
+185.199.108.154 github.global.ssl.fastly.net
+199.232.69.194 codeload.github.com

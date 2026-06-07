@@ -1,0 +1,5 @@
+artifacts/
+.idea/
+server.out.log
+server.err.log
+*.log

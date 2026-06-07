@@ -1,0 +1,40 @@
+{
+  "name": "旅行意义记录 Agent",
+  "short_name": "旅行记忆",
+  "description": "把有意义的旅行照片、说明和 2.5D 记忆对象组织成私人旅行档案。",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "lang": "zh-CN",
+  "display": "standalone",
+  "background_color": "#f6f9f6",
+  "theme_color": "#2f6f50",
+  "orientation": "portrait-primary",
+  "categories": ["travel", "photo", "productivity"],
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
