@@ -151,16 +151,15 @@
     const note = noteInput.value.trim();
     const title = titleInput.value.trim();
     const locationName = locationInput.value.trim() || trip.locations[0] || "旅途中";
-    const imageData = file
-      ? await resizeImage(file)
-      : createSampleImage(title || note || "新的记忆");
-
-    const media = {
-      id: createId("media"),
-      type: "image",
-      dataUrl: imageData,
-      createdAt: new Date().toISOString()
-    };
+    const media = file
+      ? {
+          id: createId("media"),
+          type: "image",
+          source: "user",
+          dataUrl: await resizeImage(file),
+          createdAt: new Date().toISOString()
+        }
+      : null;
     const agent = buildAgentDraft({ title, note, locationName, tags: tagsInput.value });
     const memory = {
       id: createId("memory"),
@@ -171,7 +170,7 @@
       agentQuestions: agent.questions,
       occurredAt: new Date().toISOString(),
       location: createLocation(locationName),
-      mediaIds: [media.id],
+      mediaIds: media ? [media.id] : [],
       object3DIds: [],
       tags: uniqueTags([...parseTags(tagsInput.value), ...agent.tags]),
       mood: moodInput.value,
@@ -181,9 +180,9 @@
       updatedAt: new Date().toISOString()
     };
 
-    state.media.unshift(media);
+    if (media) state.media.unshift(media);
     state.memories.unshift(memory);
-    if (!trip.coverMediaId) trip.coverMediaId = media.id;
+    if (media && !trip.coverMediaId) trip.coverMediaId = media.id;
     trip.updatedAt = new Date().toISOString();
     state.selectedMemoryId = memory.id;
     saveState();
@@ -344,34 +343,35 @@
       return;
     }
     dom.viewContent.innerHTML = `
-      <div class="memory-grid">
-        ${memories.map(renderMemoryCard).join("")}
+      <div class="timeline-list">
+        ${memories.map(renderTimelineItem).join("")}
       </div>
     `;
   }
 
-  function renderMemoryCard(memory) {
-    const media = getMedia(memory.mediaIds[0]);
+  function renderTimelineItem(memory) {
     const object = getObject3D(memory.object3DIds[0]);
+    const hasPhoto = hasUserPhoto(memory);
     const badge = object
       ? object.status === "succeeded"
         ? '<span class="badge is-ready">3D 已生成</span>'
         : '<span class="badge is-processing">3D 建模中</span>'
-      : '<span class="badge">可生成 3D</span>';
+      : hasPhoto
+        ? '<span class="badge">可生成 3D</span>'
+        : '<span class="badge">无照片</span>';
     return `
-      <article class="memory-card" data-memory-id="${memory.id}">
-        <button type="button">
-          <img class="memory-photo" src="${media.dataUrl}" alt="${escapeAttr(memory.title)}">
-          <div class="memory-body">
-            <div class="status-row">
+      <article class="timeline-item" data-memory-id="${memory.id}">
+        <time datetime="${escapeAttr(memory.occurredAt)}">${formatTimelineDate(memory.occurredAt)}</time>
+        <button class="timeline-entry" type="button">
+          <span class="timeline-dot" aria-hidden="true"></span>
+          <span class="timeline-main">
+            <span class="status-row">
               <span class="badge is-private">私密</span>
               ${badge}
-            </div>
-            <h3>${escapeHtml(memory.title)}</h3>
-            <p class="meta">${escapeHtml(memory.location.name)} · ${formatDateTime(memory.occurredAt)}</p>
-            <p class="meta">${escapeHtml(truncate(memory.rawNote, 70))}</p>
-            <div class="tag-row">${memory.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
-          </div>
+            </span>
+            <strong>${escapeHtml(memory.title)}</strong>
+            <span class="meta">${escapeHtml(memory.location.name)} · ${escapeHtml(truncate(memory.rawNote, 54))}</span>
+          </span>
         </button>
       </article>
     `;
@@ -479,12 +479,13 @@
       return;
     }
 
-    const media = getMedia(memory.mediaIds[0]);
     const object = getObject3D(memory.object3DIds[0]);
     const hasReadyObject = object?.status === "succeeded";
+    const hasPhoto = hasUserPhoto(memory);
+    const media = hasPhoto ? getMedia(memory.mediaIds[0]) : null;
     dom.inspector.innerHTML = `
       <div class="detail">
-        <img class="detail-cover" src="${media.dataUrl}" alt="${escapeAttr(memory.title)}">
+        ${media ? `<img class="detail-cover" src="${media.dataUrl}" alt="${escapeAttr(memory.title)}">` : '<div class="detail-cover detail-cover-empty">这条记忆还没有照片</div>'}
         <div>
           <p class="eyebrow">${escapeHtml(memory.location.name)}</p>
           <h3>${escapeHtml(memory.title)}</h3>
@@ -492,7 +493,7 @@
         </div>
 
         <div class="detail-actions">
-          <button class="primary-action" type="button" data-action="generate-3d">${hasReadyObject ? "重新生成 3D" : object ? "查看 3D" : "生成 3D"}</button>
+          ${hasPhoto ? `<button class="primary-action" type="button" data-action="generate-3d">${hasReadyObject ? "重新生成 3D" : object ? "查看 3D" : "生成 3D"}</button>` : '<span class="disabled-action">添加照片后可生成 3D</span>'}
           <button class="ghost-button" type="button" data-action="export-card">导出卡片</button>
         </div>
 
@@ -530,6 +531,15 @@
   }
 
   function renderObjectStatus(memory, object) {
+    if (!hasUserPhoto(memory)) {
+      return `
+        <div class="detail-section">
+          <strong>3D 状态</strong>
+          <p class="meta">这条记忆还没有照片。上传或导入照片后，才会出现可生成的 3D 记忆对象。</p>
+        </div>
+      `;
+    }
+
     if (!object) {
       return `
         <div class="detail-section">
@@ -584,6 +594,7 @@
   async function start3DGeneration(memoryId) {
     const memory = state.memories.find((item) => item.id === memoryId);
     if (!memory) return;
+    if (!hasUserPhoto(memory)) return;
     let object = getObject3D(memory.object3DIds[0]);
     if (!object) {
       object = {
@@ -610,6 +621,7 @@
     }
 
     object.assetUrl = `local://${object.id}`;
+    activeView = "objects";
     saveState();
     render();
   }
@@ -632,15 +644,17 @@
     if (!music) {
       const context = new AudioContext();
       const master = context.createGain();
+      const padGain = context.createGain();
       const delayNode = context.createDelay(1.4);
       const feedback = context.createGain();
       const filter = context.createBiquadFilter();
 
-      master.gain.value = 0.045;
+      master.gain.value = 0.11;
+      padGain.gain.value = 0.028;
       delayNode.delayTime.value = 0.42;
       feedback.gain.value = 0.22;
       filter.type = "lowpass";
-      filter.frequency.value = 1800;
+      filter.frequency.value = 2200;
 
       master.connect(filter);
       filter.connect(context.destination);
@@ -648,10 +662,13 @@
       delayNode.connect(feedback);
       feedback.connect(delayNode);
       delayNode.connect(filter);
+      padGain.connect(master);
 
       music = {
         context,
         master,
+        padGain,
+        padOscillators: [],
         playing: false,
         timers: [],
         step: 0,
@@ -661,9 +678,25 @@
 
     await music.context.resume();
     music.playing = true;
-    dom.musicToggleButton.textContent = "关闭音乐";
+    startPad();
+    dom.musicToggleButton.textContent = "音乐播放中";
     dom.musicToggleButton.setAttribute("aria-pressed", "true");
     scheduleAmbientNote();
+  }
+
+  function startPad() {
+    if (!music || music.padOscillators.length) return;
+    [146.83, 220.0, 293.66].forEach((frequency, index) => {
+      const oscillator = music.context.createOscillator();
+      const gain = music.context.createGain();
+      oscillator.type = index === 1 ? "triangle" : "sine";
+      oscillator.frequency.value = frequency;
+      gain.gain.value = index === 1 ? 0.18 : 0.11;
+      oscillator.connect(gain);
+      gain.connect(music.padGain);
+      oscillator.start();
+      music.padOscillators.push(oscillator);
+    });
   }
 
   function scheduleAmbientNote() {
@@ -671,8 +704,8 @@
     const now = music.context.currentTime;
     const note = music.notes[music.step % music.notes.length];
     const harmony = music.notes[(music.step + 3) % music.notes.length] / 2;
-    playTone(note, now, 2.6, 0.032);
-    playTone(harmony, now + 0.04, 3.1, 0.024);
+    playTone(note, now, 2.8, 0.055);
+    playTone(harmony, now + 0.04, 3.2, 0.036);
     music.step += music.step % 4 === 3 ? 2 : 1;
     music.timers.push(window.setTimeout(scheduleAmbientNote, 1450));
   }
@@ -696,6 +729,14 @@
     music.playing = false;
     music.timers.forEach((timer) => window.clearTimeout(timer));
     music.timers = [];
+    music.padOscillators.forEach((oscillator) => {
+      try {
+        oscillator.stop();
+      } catch (error) {
+        // The oscillator may already be stopped by the browser.
+      }
+    });
+    music.padOscillators = [];
     dom.musicToggleButton.textContent = "开启音乐";
     dom.musicToggleButton.setAttribute("aria-pressed", "false");
   }
@@ -818,13 +859,19 @@
     const memories = getTripMemories(trip.id);
     if (!searchQuery) return memories;
     return memories.filter((memory) => {
+      const objectText = memory.object3DIds
+        .map((id) => getObject3D(id))
+        .filter(Boolean)
+        .map((object) => `${object.generationLevel} ${object.status} ${object.qualityReport}`)
+        .join(" ");
       const haystack = [
         memory.title,
         memory.rawNote,
         memory.agentSummary,
         memory.location.name,
         memory.mood,
-        memory.tags.join(" ")
+        memory.tags.join(" "),
+        objectText
       ].join(" ").toLowerCase();
       return haystack.includes(searchQuery);
     });
@@ -832,6 +879,13 @@
 
   function getMedia(id) {
     return state.media.find((item) => item.id === id) || { dataUrl: createSampleImage("缺失图片") };
+  }
+
+  function hasUserPhoto(memory) {
+    return memory.mediaIds.some((id) => {
+      const media = state.media.find((item) => item.id === id);
+      return media?.type === "image" && media.source !== "placeholder";
+    });
   }
 
   function getObject3D(id) {
@@ -922,6 +976,7 @@
         {
           id: mediaId,
           type: "image",
+          source: "user",
           dataUrl: image,
           createdAt: new Date().toISOString()
         }
@@ -1114,6 +1169,17 @@
   }
 
   function formatDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  function formatTimelineDate(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "";
     return new Intl.DateTimeFormat("zh-CN", {
